@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yggdrasil 世界树</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #58a6ff;
+  --accent2: #3fb950;
+  --warning: #d29922;
+  --error: #f85149;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── Layout ───────────────────────── */
+#sidebar {
+  width: 340px;
+  min-width: 260px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Sidebar: Tab Nav ─────────────── */
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  padding: 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sidebar-tab:hover { color: var(--text); }
+
+/* ── Sidebar: Conversations ───────── */
+#conv-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#tree-panel { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+
+#conv-header {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#conv-header select {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+#conv-header button {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+#conv-header button:hover { opacity: 0.85; }
+
+#conv-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+.conv-item:hover { background: var(--surface2); }
+.conv-item.active { background: rgba(88,166,255,0.15); }
+.conv-item .conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-item .conv-status {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.conv-item .conv-status.running { background: var(--accent); animation: pulse 1s infinite; }
+.conv-item .conv-status.idle { background: var(--accent2); }
+.conv-item .conv-status.error { background: var(--error); }
+.conv-item .conv-time { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.conv-item .conv-delete {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--error);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+}
+.conv-item:hover .conv-delete { opacity: 0.6; }
+.conv-item .conv-delete:hover { opacity: 1; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── Sidebar: Memory Tree ─────────── */
+#tree-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.tree-node {
+  margin-left: 16px;
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+  margin-top: 2px;
+}
+.tree-node-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.tree-node-label:hover { background: var(--surface2); }
+.tree-node-label.selected { background: rgba(88,166,255,0.15); color: var(--accent); }
+.tree-toggle { width: 16px; text-align: center; color: var(--text-dim); font-size: 11px; }
+.tree-name { font-weight: 500; }
+.tree-weight { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.tree-children { display: none; }
+.tree-children.open { display: block; }
+
+#node-detail {
+  border-top: 1px solid var(--border);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 12px;
+  font-size: 12px;
+  background: var(--bg);
+}
+#node-detail h3 { font-size: 13px; margin-bottom: 8px; color: var(--accent); }
+#node-detail pre {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.edge-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface2);
+  font-size: 11px;
+  margin: 2px;
+  color: var(--accent2);
+}
+
+/* ── Main: Topbar ─────────────────── */
+#topbar {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+}
+#topbar .title { font-size: 16px; font-weight: 600; }
+#status-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+#status-badge.running { background: rgba(88,166,255,0.2); color: var(--accent); }
+#status-badge.idle { background: rgba(63,185,80,0.2); color: var(--accent2); }
+#token-counter { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+#log-toggle {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+#log-toggle.active { color: var(--warning); border-color: var(--warning); }
+
+/* ── Main: Chat ───────────────────── */
+#chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.msg {
+  max-width: 85%;
+  margin-bottom: 16px;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+.msg.user { margin-left: auto; }
+.msg.assistant { margin-right: auto; }
+.msg-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.msg.user .msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.msg.assistant .msg-bubble { background: var(--surface2); border-bottom-left-radius: 4px; }
+
+/* Log block — collapsible group of tool events between assistant messages */
+.log-block {
+  margin-bottom: 12px;
+}
+.log-block.collapsed .log-block-body { display: none; }
+.log-block-header {
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.log-block-header:hover { background: var(--surface2); }
+.log-block-header .toggle-icon { font-size: 10px; }
+.log-block-body {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+
+/* Tool call events (inside log blocks) */
+.event-group {
+  margin-bottom: 4px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.event-header {
+  padding: 6px 10px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.event-header .tool-icon { color: var(--warning); }
+.event-header .tool-name { font-weight: 600; font-family: var(--font-mono); font-size: 11px; }
+.event-body {
+  display: none;
+  padding: 6px 10px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  color: var(--text-dim);
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+}
+.event-body.open { display: block; }
+
+.thinking-bubble {
+  padding: 8px 12px;
+  background: rgba(210,153,34,0.08);
+  border: 1px solid rgba(210,153,34,0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--warning);
+  margin-bottom: 4px;
+  font-style: italic;
+}
+.reboot-notice {
+  text-align: center;
+  padding: 10px;
+  color: var(--error);
+  font-size: 12px;
+  border: 1px dashed var(--error);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* No conversation selected */
+#no-conv-msg {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
+/* ── Input ────────────────────────── */
+#input-area {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  gap: 10px;
+}
+#msg-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 12px 16px;
+  font-size: 14px;
+  resize: none;
+  min-height: 44px;
+  max-height: 160px;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+#msg-input:focus { border-color: var(--accent); }
+#send-btn {
+  padding: 0 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+#send-btn:hover { opacity: 0.85; }
+#send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div class="sidebar-tabs">
+    <button class="sidebar-tab active" onclick="switchTab('conv')">💬 对话</button>
+    <button class="sidebar-tab" onclick="switchTab('tree')">🌳 记忆树</button>
+  </div>
+
+  <!-- Conversations Panel -->
+  <div id="conv-panel">
+    <div id="conv-header">
+      <select id="new-conv-model">
+        <option value="deepseek-chat">DeepSeek Chat [128K] 通用对话</option>
+        <option value="longcat-flash-lite">LongCat Flash Lite [320K] 超长上下文</option>
+        <option value="longcat-thinking-lite">LongCat Thinking Lite [256K] 推理</option>
+        <option value="google/gemma-4-31b-it:free">Gemma 4 31B [262K|27t/s] 🏆智能39 编码90% 多模态 ⚡最快免费</option>
+        <option value="minimax/minimax-m2.5:free">MiniMax M2.5 [196K|18t/s] 🏆智能42 编码强 ⚠工具错误率10.8%</option>
+        <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron 3 Super [262K|19t/s] 智能36 Agent74% 🐢延迟高</option>
+        <option value="z-ai/glm-4.5-air:free">GLM-4.5 Air [131K|13t/s] 智能23 🐢E2E 49s 仅文本</option>
+        <option value="arcee-ai/trinity-large-preview:free">Trinity Large [131K|5t/s] 工具错误最低3.3% 🐌极慢 ⚠即将下线</option>
+      </select>
+      <button onclick="createConversation()">+ 新对话</button>
+    </div>
+    <div id="conv-list"></div>
+  </div>
+
+  <!-- Memory Tree Panel -->
+  <div id="tree-panel">
+    <div style="padding:8px;display:flex;gap:6px">
+      <button onclick="refreshTree()" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px;border-radius:6px;cursor:pointer;font-size:12px;">刷新</button>
+    </div>
+    <div id="tree-container"></div>
+    <div id="node-detail" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Main Area -->
+<div id="main">
+  <div id="topbar">
+    <span class="title">🌲 Yggdrasil</span>
+    <span id="status-badge" class="idle">就绪</span>
+    <button id="log-toggle" onclick="toggleLogs()">📋 日志</button>
+    <span id="token-counter">Tokens: 0</span>
+  </div>
+
+  <div id="no-conv-msg">选择或创建一个对话开始</div>
+
+  <div id="chat-area" style="display:none"></div>
+  <div id="input-area" style="display:none">
+    <textarea id="msg-input" placeholder="输入消息... (Shift+Enter 换行)" rows="1"></textarea>
+    <button id="send-btn" onclick="sendMessage()">发送</button>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────
+let ws = null;
+let currentConvId = null;
+let showLogs = false;
+let conversations = [];
+
+const chatArea = document.getElementById('chat-area');
+const noConvMsg = document.getElementById('no-conv-msg');
+const inputArea = document.getElementById('input-area');
+const msgInput = document.getElementById('msg-input');
+const sendBtn = document.getElementById('send-btn');
+const statusBadge = document.getElementById('status-badge');
+const tokenCounter = document.getElementById('token-counter');
+
+// ── Sidebar Tab Switching ────────────
+function switchTab(tab) {
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+  if (tab === 'conv') {
+    document.querySelectorAll('.sidebar-tab')[0].classList.add('active');
+    document.getElementById('conv-panel').style.display = 'flex';
+    document.getElementById('tree-panel').style.display = 'none';
+  } else {
+    document.querySelectorAll('.sidebar-tab')[1].classList.add('active');
+    document.getElementById('conv-panel').style.display = 'none';
+    document.getElementById('tree-panel').style.display = 'flex';
+    if (currentConvId) refreshTree();
+  }
+}
+
+// ── Log Toggle ────────────────────────
+function toggleLogs() {
+  showLogs = !showLogs;
+  const btn = document.getElementById('log-toggle');
+  btn.classList.toggle('active', showLogs);
+  // Toggle all log blocks
+  document.querySelectorAll('.log-block').forEach(b => {
+    b.classList.toggle('collapsed', !showLogs);
+  });
+}
+
+// ── Conversations API ────────────────
+async function loadConversations() {
+  try {
+    const resp = await fetch('/api/conversations');
+    conversations = await resp.json();
+    renderConvList();
+  } catch (e) {
+    console.error('Failed to load conversations:', e);
+  }
+}
+
+function renderConvList() {
+  const list = document.getElementById('conv-list');
+  list.innerHTML = '';
+  for (const c of conversations) {
+    const div = document.createElement('div');
+    div.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
+    const time = new Date(c.updated_at * 1000).toLocaleString('zh-CN', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    div.innerHTML = `
+      <span class="conv-status ${c.status}"></span>
+      <span class="conv-title">${escapeHtml(c.title)}</span>
+      <span class="conv-time">${time}</span>
+      <button class="conv-delete" onclick="event.stopPropagation();deleteConv('${c.id}')" title="删除">✕</button>
+    `;
+    div.addEventListener('click', () => selectConversation(c.id));
+    list.appendChild(div);
+  }
+}
+
+async function createConversation() {
+  const model = document.getElementById('new-conv-model').value;
+  try {
+    const resp = await fetch('/api/conversations', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model}),
+    });
+    const data = await resp.json();
+    await loadConversations();
+    selectConversation(data.id);
+  } catch (e) {
+    console.error('Failed to create conversation:', e);
+  }
+}
+
+async function deleteConv(id) {
+  if (!confirm('确定删除此对话？')) return;
+  try {
+    await fetch(`/api/conversations/${id}`, {method: 'DELETE'});
+    if (id === currentConvId) {
+      currentConvId = null;
+      disconnectWS();
+      showNoConv();
+    }
+    await loadConversations();
+  } catch (e) {
+    console.error('Failed to delete conversation:', e);
+  }
+}
+
+function showNoConv() {
+  noConvMsg.style.display = 'flex';
+  chatArea.style.display = 'none';
+  inputArea.style.display = 'none';
+}
+
+// ── Select Conversation ──────────────
+async function selectConversation(convId) {
+  if (convId === currentConvId) return;
+  currentConvId = convId;
+
+  // UI
+  noConvMsg.style.display = 'none';
+  chatArea.style.display = 'block';
+  inputArea.style.display = 'flex';
+  chatArea.innerHTML = '';
+  currentLogBlock = null;
+  currentLogCount = 0;
+  renderConvList();
+
+  // Load full history from events (includes tool calls for log blocks)
+  try {
+    const resp = await fetch(`/api/conversations/${convId}/events`);
+    const data = await resp.json();
+    for (const evt of data.events) {
+      switch (evt.type) {
+        case 'message':
+          if (evt.data.role === 'user') {
+            finalizeLogBlock();
+            appendUserMsg(evt.data.content);
+          } else if (evt.data.role === 'assistant' && evt.data.content) {
+            finalizeLogBlock();
+            appendAssistantMsg(evt.data.content);
+          }
+          break;
+        case 'thinking': {
+          const body = ensureLogBlock();
+          const div = document.createElement('div');
+          div.className = 'thinking-bubble';
+          div.textContent = '💭 ' + (evt.data.content || '');
+          body.appendChild(div);
+          currentLogCount++;
+          break;
+        }
+        case 'tool_call': {
+          const body = ensureLogBlock();
+          appendToolCallInBlock(body, evt.data);
+          currentLogCount++;
+          break;
+        }
+        case 'tool_result':
+          updateToolResult(evt.data);
+          break;
+        case 'reboot': {
+          finalizeLogBlock();
+          const div = document.createElement('div');
+          div.className = 'reboot-notice';
+          div.textContent = '🔄 上下文已重启 — Agent 从根节点重新苏醒';
+          chatArea.appendChild(div);
+          break;
+        }
+      }
+    }
+    finalizeLogBlock();
+  } catch (e) {
+    // Fallback to message-only history
+    try {
+      const history = await fetch(`/api/conversations/${convId}/messages`).then(r => r.json());
+      for (const msg of history) {
+        if (msg.role === 'user') appendUserMsg(msg.content);
+        else if (msg.role === 'assistant' && msg.content) appendAssistantMsg(msg.content);
+      }
+    } catch (e2) {
+      console.error('Failed to load history:', e2);
+    }
+  }
+
+  // Connect WebSocket
+  connectWS(convId);
+
+  // Load status
+  try {
+    const status = await fetch(`/api/conversations/${convId}/status`).then(r => r.json());
+    const ctx = status.context_tokens || 0;
+    const cost = status.total_cost != null ? `¥${status.total_cost.toFixed(4)}` : '';
+    tokenCounter.textContent = `上下文: ${ctx} ${cost ? '| ' + cost : ''}`;
+    if (status.is_running) {
+      statusBadge.textContent = '思考中...';
+      statusBadge.className = 'running';
+      sendBtn.disabled = true;
+    } else {
+      statusBadge.textContent = '就绪';
+      statusBadge.className = 'idle';
+      sendBtn.disabled = false;
+    }
+  } catch (e) {}
+}
+
+// ── WebSocket ────────────────────────
+function connectWS(convId) {
+  disconnectWS();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/chat/${convId}`);
+
+  ws.onopen = () => console.log('WS connected to', convId);
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type !== 'pong') handleEvent(msg);
+  };
+
+  ws.onclose = () => {
+    console.log('WS disconnected');
+    // Reconnect if still on same conversation
+    setTimeout(() => {
+      if (currentConvId === convId) connectWS(convId);
+    }, 3000);
+  };
+
+  ws.onerror = (err) => console.error('WS error:', err);
+}
+
+function disconnectWS() {
+  if (ws) {
+    ws.onclose = null; // prevent auto-reconnect
+    ws.close();
+    ws = null;
+  }
+}
+
+// ── Current log block for grouping tool events ──
+let currentLogBlock = null;
+let currentLogCount = 0;
+
+function ensureLogBlock() {
+  if (!currentLogBlock) {
+    const block = document.createElement('div');
+    block.className = 'log-block' + (showLogs ? '' : ' collapsed');
+    currentLogBlock = block;
+
+    const header = document.createElement('div');
+    header.className = 'log-block-header';
+    header.innerHTML = '<span class="toggle-icon">▶</span> <span class="log-summary">工具调用中...</span>';
+    header.addEventListener('click', () => {
+      block.classList.toggle('collapsed');
+      header.querySelector('.toggle-icon').textContent = block.classList.contains('collapsed') ? '▶' : '▼';
+    });
+
+    const body = document.createElement('div');
+    body.className = 'log-block-body';
+
+    block.appendChild(header);
+    block.appendChild(body);
+    chatArea.appendChild(block);
+    currentLogCount = 0;
+  }
+  return currentLogBlock.querySelector('.log-block-body');
+}
+
+function finalizeLogBlock() {
+  if (currentLogBlock) {
+    const summary = currentLogBlock.querySelector('.log-summary');
+    summary.textContent = `${currentLogCount} 个工具调用`;
+    const toggleIcon = currentLogBlock.querySelector('.toggle-icon');
+    toggleIcon.textContent = currentLogBlock.classList.contains('collapsed') ? '▶' : '▼';
+    currentLogBlock = null;
+    currentLogCount = 0;
+  }
+}
+
+// ── Handle Events ────────────────────
+function handleEvent(msg) {
+  switch (msg.type) {
+    case 'message':
+      if (msg.data.role === 'assistant') {
+        finalizeLogBlock();
+        appendAssistantMsg(msg.data.content);
+      }
+      break;
+    case 'thinking': {
+      const body = ensureLogBlock();
+      const div = document.createElement('div');
+      div.className = 'thinking-bubble';
+      div.textContent = '💭 ' + (msg.data.content || '');
+      body.appendChild(div);
+      currentLogCount++;
+      break;
+    }
+    case 'tool_call': {
+      const body = ensureLogBlock();
+      appendToolCallInBlock(body, msg.data);
+      currentLogCount++;
+      break;
+    }
+    case 'tool_result':
+      updateToolResult(msg.data);
+      break;
+    case 'reboot': {
+      finalizeLogBlock();
+      const div = document.createElement('div');
+      div.className = 'reboot-notice';
+      div.textContent = '🔄 上下文已重启 — Agent 从根节点重新苏醒';
+      chatArea.appendChild(div);
+      break;
+    }
+    case 'status':
+      updateStatus(msg.data);
+      break;
+    case 'final_response':
+      finalizeLogBlock();
+      sendBtn.disabled = false;
+      statusBadge.textContent = '就绪';
+      statusBadge.className = 'idle';
+      if (msg.data.tokens) tokenCounter.textContent = `Tokens: ${msg.data.tokens}`;
+      if (msg.data.elapsed) tokenCounter.textContent += ` | ${msg.data.elapsed}s`;
+      refreshTree();
+      loadConversations(); // refresh status indicators
+      break;
+    case 'error':
+      appendError(msg.data.error);
+      sendBtn.disabled = false;
+      break;
+  }
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+// ── Send ─────────────────────────────
+function sendMessage() {
+  const text = msgInput.value.trim();
+  if (!text || !currentConvId) return;
+
+  appendUserMsg(text);
+  msgInput.value = '';
+  msgInput.style.height = 'auto';
+  sendBtn.disabled = true;
+  statusBadge.textContent = '思考中...';
+  statusBadge.className = 'running';
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'message', message: text}));
+  } else {
+    // Fallback REST
+    fetch(`/api/conversations/${currentConvId}/messages`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: text}),
+    }).then(r => r.json()).then(() => {
+      // Events will come via WS reconnect
+    }).catch(err => {
+      appendError(err.message);
+      sendBtn.disabled = false;
+    });
+  }
+}
+
+// ── Render Chat ──────────────────────
+function appendUserMsg(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.innerHTML = `<div class="msg-bubble">${escapeHtml(text)}</div>`;
+  chatArea.appendChild(div);
+}
+
+function appendAssistantMsg(text) {
+  if (!text) return;
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `<div class="msg-bubble">${formatContent(text)}</div>`;
+  chatArea.appendChild(div);
+}
+
+function appendToolCallInBlock(container, data) {
+  const group = document.createElement('div');
+  group.className = 'event-group';
+  group.dataset.toolId = data.id || data.name;
+
+  const argsStr = JSON.stringify(data.arguments, null, 2);
+  const iconMap = {
+    'web_search': '🔍', 'fetch_webpage': '🌐',
+    'run_background_task': '⏳', 'check_task': '📋', 'list_tasks': '📋',
+    'retrieve_context': '🌲', 'create_memory_node': '➕', 'update_memory_node': '✏️',
+    'hard_delete': '🗑️', 'consolidate_memory': '🔗',
+    'read_file': '📄', 'write_file': '💾', 'search_files': '🔎',
+  };
+  const icon = iconMap[data.name] || '⚡';
+
+  group.innerHTML = `
+    <div class="event-header" onclick="this.nextElementSibling.classList.toggle('open')">
+      <span class="tool-icon">${icon}</span>
+      <span class="tool-name">${escapeHtml(data.name)}</span>
+      <span style="color:var(--text-dim);margin-left:auto;font-size:10px">▶</span>
+    </div>
+    <div class="event-body">
+<strong>参数:</strong>
+${escapeHtml(argsStr)}
+
+<strong>结果:</strong> <span class="tool-result">⏳</span>
+    </div>
+  `;
+  container.appendChild(group);
+}
+
+function updateToolResult(data) {
+  const groups = chatArea.querySelectorAll('.event-group');
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    if (g.dataset.toolId === (data.id || data.name)) {
+      const span = g.querySelector('.tool-result');
+      if (span) span.textContent = data.result;
+      break;
+    }
+  }
+}
+
+function appendError(text) {
+  finalizeLogBlock();
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `<div class="msg-bubble" style="border:1px solid var(--error);color:var(--error)">❌ ${escapeHtml(text)}</div>`;
+  chatArea.appendChild(div);
+}
+
+function updateStatus(data) {
+  if (data.context_tokens != null) {
+    const cost = data.total_cost != null ? `¥${data.total_cost.toFixed(4)}` : '';
+    tokenCounter.textContent = `上下文: ${data.context_tokens} | in:${data.total_input||0} out:${data.total_output||0} ${cost ? '| ' + cost : ''}`;
+  }
+  if (data.state === 'running' || data.is_running) {
+    statusBadge.textContent = '思考中...';
+    statusBadge.className = 'running';
+  } else if (data.state === 'compressing') {
+    statusBadge.textContent = '压缩中...';
+    statusBadge.className = 'running';
+  } else if (data.state === 'auto_continuing') {
+    statusBadge.textContent = `续接 #${data.round || ''}`;
+    statusBadge.className = 'running';
+  } else if (data.state === 'idle') {
+    statusBadge.textContent = '就绪';
+    statusBadge.className = 'idle';
+  }
+  if (data.warning === 'token_threshold_exceeded') {
+    statusBadge.textContent = '⚠️ Token预警';
+    statusBadge.style.background = 'rgba(210,153,34,0.2)';
+    statusBadge.style.color = 'var(--warning)';
+  }
+}
+
+// ── Memory Tree ──────────────────────
+async function refreshTree() {
+  if (!currentConvId) return;
+  try {
+    const resp = await fetch(`/api/conversations/${currentConvId}/memory/full_tree`);
+    const tree = await resp.json();
+    renderTree(tree);
+  } catch (e) {
+    console.error('Failed to load tree:', e);
+  }
+}
+
+function renderTree(node, container) {
+  if (!container) {
+    container = document.getElementById('tree-container');
+    container.innerHTML = '';
+  }
+
+  const div = document.createElement('div');
+  div.className = 'tree-node';
+
+  const hasChildren = node.children && node.children.length > 0;
+  const label = document.createElement('div');
+  label.className = 'tree-node-label';
+  label.innerHTML = `
+    <span class="tree-toggle">${hasChildren ? '▶' : '·'}</span>
+    <span class="tree-name">${escapeHtml(node.name)}</span>
+    <span class="tree-weight">${node.weight !== undefined ? node.weight.toFixed(2) : ''}</span>
+  `;
+
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hasChildren) {
+      const childDiv = div.querySelector('.tree-children');
+      const toggle = label.querySelector('.tree-toggle');
+      if (childDiv) {
+        childDiv.classList.toggle('open');
+        toggle.textContent = childDiv.classList.contains('open') ? '▼' : '▶';
+      }
+    }
+    showNodeDetail(node.name);
+    document.querySelectorAll('.tree-node-label.selected').forEach(el => el.classList.remove('selected'));
+    label.classList.add('selected');
+  });
+
+  div.appendChild(label);
+
+  if (hasChildren) {
+    const childContainer = document.createElement('div');
+    childContainer.className = 'tree-children';
+    node.children.forEach(child => renderTree(child, childContainer));
+    div.appendChild(childContainer);
+  }
+
+  container.appendChild(div);
+}
+
+async function showNodeDetail(name) {
+  if (!currentConvId) return;
+  const panel = document.getElementById('node-detail');
+  try {
+    const resp = await fetch(`/api/conversations/${currentConvId}/memory?node_name=${encodeURIComponent(name)}`);
+    const data = await resp.json();
+    const n = data.node;
+    let html = `<h3>${escapeHtml(n.name)}</h3>`;
+    html += `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">k=${n.k_value} | weight=${n.current_weight} | updated=${n.updated_at}</div>`;
+    html += `<pre>${escapeHtml(n.content)}</pre>`;
+
+    if (data.outgoing_edges.length > 0) {
+      html += '<div class="edges" style="margin-top:8px"><strong>出边:</strong> ';
+      data.outgoing_edges.forEach(e => {
+        html += `<span class="edge-tag">→ ${escapeHtml(e.target)} [${escapeHtml(e.label)}]</span>`;
+      });
+      html += '</div>';
+    }
+    if (data.incoming_edges.length > 0) {
+      html += '<div class="edges"><strong>入边:</strong> ';
+      data.incoming_edges.forEach(e => {
+        html += `<span class="edge-tag">← ${escapeHtml(e.source)} [${escapeHtml(e.label)}]</span>`;
+      });
+      html += '</div>';
+    }
+
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+  } catch (e) {
+    panel.innerHTML = `<p style="color:var(--error)">加载失败: ${e.message}</p>`;
+    panel.style.display = 'block';
+  }
+}
+
+// ── Utils ────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatContent(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:10px;border-radius:6px;margin:8px 0;overflow-x:auto"><code>$2</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:13px">$1</code>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+// ── Input handling ───────────────────
+msgInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+msgInput.addEventListener('input', () => {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 160) + 'px';
+});
+
+// ── Init ─────────────────────────────
+loadConversations();
+</script>
+</body>
+</html>
+</script>
+</body>
+</html>
