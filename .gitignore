@@ -48,3 +48,9 @@ src/yggdrasil/yggdrasil.db
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
+
+# docs
+特性/
+认知系统架构蓝图.md
+本项目任务.md
+old/
